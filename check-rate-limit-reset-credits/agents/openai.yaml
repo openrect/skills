@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Rate-Limit Reset Credits"
+  short_description: "Safely checks local Codex rate-limit reset credits."
+  default_prompt: "Use $check-rate-limit-reset-credits to check my local Codex rate-limit reset credits and summarize only the safe fields."
