@@ -17,16 +17,17 @@ API_URL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 
 
 def load_access_token(auth_path: Path) -> str:
+    expanded_auth_path = auth_path.expanduser()
     try:
-        auth = json.loads(auth_path.expanduser().read_text(encoding="utf-8"))
+        auth = json.loads(expanded_auth_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
-        raise RuntimeError("~/.codex/auth.json not found.") from exc
+        raise RuntimeError(f"auth.json not found: {expanded_auth_path}") from exc
     except json.JSONDecodeError as exc:
-        raise RuntimeError("~/.codex/auth.json is not valid JSON.") from exc
+        raise RuntimeError(f"auth.json is not valid JSON: {expanded_auth_path}") from exc
 
     token = auth.get("tokens", {}).get("access_token")
     if not isinstance(token, str) or not token.strip():
-        raise RuntimeError("tokens.access_token not found in ~/.codex/auth.json.")
+        raise RuntimeError(f"tokens.access_token not found in {expanded_auth_path}.")
     return token
 
 
@@ -69,12 +70,16 @@ def find_credit_list(data: Any) -> list[Any]:
     return []
 
 
+def first_value(mapping: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
 def summarize(data: Any) -> dict[str, Any]:
     if isinstance(data, dict):
-        if "available_count" in data:
-            available_count = data["available_count"]
-        else:
-            available_count = data.get("availableCount")
+        available_count = first_value(data, "available_count", "availableCount")
     else:
         available_count = None
 
@@ -86,8 +91,8 @@ def summarize(data: Any) -> dict[str, Any]:
             {
                 "status": credit.get("status"),
                 "title": credit.get("title"),
-                "granted_at": local_time_text(credit.get("granted_at")),
-                "expires_at": local_time_text(credit.get("expires_at")),
+                "granted_at": local_time_text(first_value(credit, "granted_at", "grantedAt")),
+                "expires_at": local_time_text(first_value(credit, "expires_at", "expiresAt")),
             }
         )
 
@@ -111,7 +116,9 @@ def fetch_summary(auth_path: Path, url: str, timeout: float) -> tuple[int, dict[
             body = response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            return 401, {"error": "HTTP 401: 凭证失效或没有正确携带 Authorization header。"}
+            return 401, {
+                "error": "HTTP 401: Authentication failed, or the Authorization header is missing or invalid."
+            }
         return exc.code, {"error": f"HTTP {exc.code}: {exc.reason}"}
     except urllib.error.URLError as exc:
         return 0, {"error": f"Network error: {exc.reason}"}
